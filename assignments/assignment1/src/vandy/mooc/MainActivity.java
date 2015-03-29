@@ -3,15 +3,17 @@ package vandy.mooc;
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.IBinder;
-import android.util.Log;
 import android.view.View;
 import android.view.inputmethod.InputMethodManager;
 import android.webkit.URLUtil;
 import android.widget.EditText;
 import android.widget.Toast;
+
+import java.io.File;
 
 /**
  * A main Activity that prompts the user for a URL to an image and
@@ -40,7 +42,9 @@ public class MainActivity extends LifecycleLoggingActivity {
      * doesn't specify otherwise.
      */
     private Uri mDefaultUrl =
-        Uri.parse("http://www.dre.vanderbilt.edu/~schmidt/robot.png");
+            Uri.parse("http://www.dre.vanderbilt.edu/~schmidt/robot.png");
+
+    public static final String PREFS_NAME = "MyPrefsFile";
 
     /**
      * Hook method called when a new instance of Activity is created.
@@ -53,14 +57,33 @@ public class MainActivity extends LifecycleLoggingActivity {
     protected void onCreate(Bundle savedInstanceState) {
         // Always call super class for necessary
         // initialization/implementation.
-        // @@ TODO -- you fill in here.
+        super.onCreate(savedInstanceState);
 
         // Set the default layout.
-        // @@ TODO -- you fill in here.
+        setContentView(R.layout.main_activity);
 
         // Cache the EditText that holds the urls entered by the user
         // (if any).
         // @@ TODO -- you fill in here.
+        // Restore preferences
+        mUrlEditText = (EditText) findViewById(R.id.url);
+
+        SharedPreferences settings = getSharedPreferences(PREFS_NAME, 0);
+        if (settings != null) {
+            String url = settings.getString("url", "");
+            mUrlEditText.setText(url);
+        }
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+
+        SharedPreferences settings = getSharedPreferences(PREFS_NAME, 0);
+        SharedPreferences.Editor editor = settings.edit();
+        editor.putString("url", mUrlEditText.getText().toString());
+
+        editor.commit();
     }
 
     /**
@@ -73,7 +96,7 @@ public class MainActivity extends LifecycleLoggingActivity {
         try {
             // Hide the keyboard.
             hideKeyboard(this,
-                         mUrlEditText.getWindowToken());
+                    mUrlEditText.getWindowToken());
 
             // Call the makeDownloadImageIntent() factory method to
             // create a new Intent to an Activity that can download an
@@ -81,12 +104,17 @@ public class MainActivity extends LifecycleLoggingActivity {
             // it's an Intent that's implemented by the
             // DownloadImageActivity.
             // @@ TODO - you fill in here.
+            Intent imageIntent = makeDownloadImageIntent(getUrl());
 
             // Start the Activity associated with the Intent, which
             // will download the image and then return the Uri for the
             // downloaded image file via the onActivityResult() hook
             // method.
             // @@ TODO -- you fill in here.
+            if (imageIntent != null) {
+                startActivityForResult(imageIntent, DOWNLOAD_IMAGE_REQUEST);
+            }
+
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -105,19 +133,28 @@ public class MainActivity extends LifecycleLoggingActivity {
         // Check if the started Activity completed successfully.
         // @@ TODO -- you fill in here, replacing true with the right
         // code.
-        if (true) {
+        if (resultCode == RESULT_OK) {
             // Check if the request code is what we're expecting.
             // @@ TODO -- you fill in here, replacing true with the
             // right code.
-            if (true) {
+            if (requestCode == DOWNLOAD_IMAGE_REQUEST) {
                 // Call the makeGalleryIntent() factory method to
                 // create an Intent that will launch the "Gallery" app
                 // by passing in the path to the downloaded image
                 // file.
                 // @@ TODO -- you fill in here.
+                Intent makeGalleryIntent = makeGalleryIntent(data.getStringExtra("imageUrl"));
 
-                // Start the Gallery Activity.
-                // @@ TODO -- you fill in here.
+                if (makeGalleryIntent != null)
+                    // Start the Gallery Activity.
+                    // @@ TODO -- you fill in here.
+                    startActivity(makeGalleryIntent);
+                else {
+                    Toast toast = Toast.makeText(getBaseContext(),
+                            "Ups, there was a problem with opening the picture",
+                            Toast.LENGTH_SHORT);
+                    toast.show();
+                }
             }
         }
         // Check if the started Activity did not complete successfully
@@ -125,31 +162,48 @@ public class MainActivity extends LifecycleLoggingActivity {
         // download contents at the given URL.
         // @@ TODO -- you fill in here, replacing true with the right
         // code.
-        else if (true) {
+        else if (resultCode == RESULT_CANCELED) {
+            Toast.makeText(this,
+                    "Ups, there was a problem with downloading the image",
+                    Toast.LENGTH_SHORT).show();
         }
-    }    
+    }
 
     /**
-     * Factory method that returns an implicit Intent for viewing the
+     * Factory method that returns an Intent for viewing the
      * downloaded image in the Gallery app.
      */
     private Intent makeGalleryIntent(String pathToImageFile) {
         // Create an intent that will start the Gallery app to view
         // the image.
-    	// TODO -- you fill in here, replacing "null" with the proper
-    	// code.
-        return null;
+        // TODO -- you fill in here, replacing "null" with the proper
+        // code.
+        Intent intent = null;
+
+        if (!pathToImageFile.isEmpty()) {
+            intent = new Intent(Intent.ACTION_VIEW);
+            intent.setDataAndType(Uri.fromFile(new File(pathToImageFile)), "image/*");
+        }
+
+        return intent;
     }
 
     /**
-     * Factory method that returns an implicit Intent for downloading
-     * an image.
+     * Factory method that returns an Intent for downloading an image.
      */
     private Intent makeDownloadImageIntent(Uri url) {
         // Create an intent that will download the image from the web.
-    	// TODO -- you fill in here, replacing "null" with the proper
-    	// code.
-        return null;
+        // TODO -- you fill in here, replacing "null" with the proper
+        // code.
+
+        Intent imageIntent = null;
+
+        if (url != null) {
+            imageIntent = new Intent(this, DownloadImageActivity.class);
+            imageIntent.putExtra("imageUrl", url.toString());
+        }
+
+        return imageIntent;
     }
 
     /**
@@ -163,21 +217,23 @@ public class MainActivity extends LifecycleLoggingActivity {
 
         // If the user didn't provide a URL then use the default.
         String uri = url.toString();
-        if (uri == null || uri.equals(""))
+        if (uri == null || uri.equals("")) {
             url = mDefaultUrl;
+            mUrlEditText.setText(url.toString());
+        }
 
         // Do a sanity check to ensure the URL is valid, popping up a
         // toast if the URL is invalid.
         // @@ TODO -- you fill in here, replacing "true" with the
         // proper code.
-        if (true)
+        if (URLUtil.isValidUrl(url.toString())) {
             return url;
-        else {
+        } else {
             Toast.makeText(this,
-                           "Invalid URL",
-                           Toast.LENGTH_SHORT).show();
+                    "Invalid URL",
+                    Toast.LENGTH_SHORT).show();
             return null;
-        } 
+        }
     }
 
     /**
@@ -187,9 +243,9 @@ public class MainActivity extends LifecycleLoggingActivity {
     public void hideKeyboard(Activity activity,
                              IBinder windowToken) {
         InputMethodManager mgr =
-            (InputMethodManager) activity.getSystemService
-            (Context.INPUT_METHOD_SERVICE);
+                (InputMethodManager) activity.getSystemService
+                        (Context.INPUT_METHOD_SERVICE);
         mgr.hideSoftInputFromWindow(windowToken,
-                                    0);
+                0);
     }
 }
